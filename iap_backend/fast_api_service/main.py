@@ -32,10 +32,6 @@ init_logging("iap_api")
 ## Swagger 文件設定
 tags_metadata = [
     {
-        "name": "iap-pe",
-        "description": f"{PLATFORM_NAME} — PE 檢索 API。",
-    },
-    {
         "name": "iap-common",
         "description": f"{PLATFORM_NAME} 共用 API。",
     },
@@ -55,8 +51,6 @@ tags_metadata = [
 
 container = get_container()
 container.wire(modules=[
-    "fast_api_service.api.pe.pe",
-    "fast_api_service.api.ae.ae",
     "fast_api_service.api.common_api.common_api",
     "fast_api_service.api.auth.auth",
     "fast_api_service.api.notebook.notebook",
@@ -114,16 +108,12 @@ async def serve_static(file_path: str, request: Request):
 
 
 from fast_api_service.api.common_api import common_api
-from fast_api_service.api.pe import pe as pe_api
-from fast_api_service.api.ae import ae as ae_api
 from fast_api_service.api.auth import auth as auth_api
 from fast_api_service.api.notebook import notebook as notebook_api
 from fast_api_service.api.notebook import documents as notebook_documents_api
 from fast_api_service.api.account import account as account_api
 
 app.include_router(common_api.router)
-app.include_router(pe_api.router)
-app.include_router(ae_api.router)
 app.include_router(auth_api.router)
 app.include_router(notebook_api.router)
 app.include_router(notebook_documents_api.router)

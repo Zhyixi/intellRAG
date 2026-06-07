@@ -220,36 +220,7 @@ class rag_url:
 _API_V1 = f"http://{BACKEND_IP}:{BACKEND_PORT}/api/v1"
 
 
-class pe_api_url:
-    retrieve = f"{_API_V1}/pe/retrieve"
-    history_session_id = f"{_API_V1}/pe/history_session_id"
-    history_session = f"{_API_V1}/pe/history_session"
-    get_emp = f"{_API_V1}/pe/emp"
-    node_info = f"{_API_V1}/pe/node_info"
-    get_image = f"{_API_V1}/pe/get_image"
-    report = lambda d: f"http://10.129.128.25:3001/api/reports?UPLOAD_DATE={d}"
-    invoke = f"{_API_V1}/pe/invoke"
-    analyst = f"{_API_V1}/pe/analyst"
-    analyst_detail = f"{_API_V1}/pe/analyst-detail"
-    faqs = f"{_API_V1}/pe/faqs"
-
-
-class ae_api_url:
-    report = lambda d: f"https://faca.compal.com/api/aereports?isMaintain=Y"
-    retrieve = f"{_API_V1}/ae/retrieve"
-    history_session_id = f"{_API_V1}/ae/history_session_id"
-    history_session = f"{_API_V1}/ae/history_session"
-    get_image = f"{_API_V1}/ae/get_image"
-    invoke = f"{_API_V1}/ae/invoke"
-    faqs = f"{_API_V1}/ae/faqs"
-
-
-# 向後相容別名（舊前端可漸進遷移）
-iap_url = pe_api_url
-iap_ae_url = ae_api_url
-
 class common_url:
-    download_pdf = f"{_API_V1}/common/download_pdf"
     check_backend = f"{_API_V1}/common/check_backend"
     translate_zh2vi = f"{_API_V1}/common/translate_zh2vi"
     translate = f"{_API_V1}/common/translate"

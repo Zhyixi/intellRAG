@@ -58,23 +58,7 @@ demo_display_name = config.get("auth", "demo_display_name", fallback="張翊翔 
 _API = f"http://{BACKEND_IP}:{BACKEND_PORT}/api/v1"
 
 
-class pe_api_url:
-    retrieve = f"{_API}/pe/retrieve"
-    history_session_id = f"{_API}/pe/history_session_id"
-    history_session = f"{_API}/pe/history_session"
-    get_image = f"{_API}/pe/get_image"
-    get_emp = f"{_API}/pe/emp"
-    node_info = f"{_API}/pe/node_info"
-    faqs = f"{_API}/pe/faqs"
-    invoke = f"{_API}/pe/invoke"
-    report = lambda d: f"http://10.129.128.25:3001/api/reports?UPLOAD_DATE={d}"
-
-
-iap_url = pe_api_url  # 向後相容
-
-
 class common_url:
-    download_pdf = f"{_API}/common/download_pdf"
     check_backend = f"{_API}/common/check_backend"
     translate_zh2vi = f"{_API}/common/translate_zh2vi"
     translate = f"{_API}/common/translate"

@@ -9,8 +9,7 @@ cd "$ROOT"
 export PYTHONWARNINGS="${PYTHONWARNINGS:-ignore::DeprecationWarning,ignore::FutureWarning,ignore::UserWarning}"
 
 echo "========================================"
-echo "  test-all: 共 50 个用例（47 快测 + 3 集成）"
-echo "  未包含: performance 等 2 个 manual 用例"
+echo "  test-all: Notebook 平台快测 + 集成冒烟"
 echo "========================================"
 echo ""
 
@@ -18,11 +17,10 @@ echo "==> [1/2] 快测: API mock + unit（约 7s）"
 pytest -v --tb=short
 
 echo ""
-echo "==> [2/2] 集成: AE/PE v3 retrieve 真链路（约 30s）"
+echo "==> [2/2] 集成: check_backend 冒烟"
 pytest tests/api/test_api_integration.py --override-ini='addopts=' -v --tb=short
 
 echo ""
 echo "========================================"
-echo "  结果: 全部通过（50 passed）"
-echo "  说明: 末尾 warnings 若单独跑 pytest 仍可能出现，不是 FAILED"
+echo "  结果: 全部通过"
 echo "========================================"

@@ -120,9 +120,6 @@ spec:
   ports:
     # 這裡一次定義了多個對外開放的 Port，轉發給同一個後端程式的不同 API 介面
     - { name: main-api, port: 44000, nodePort: 44000 }
-    - { name: pe-etl, port: 8000, nodePort: 38000 }
-    - { name: ae-etl, port: 8001, nodePort: 38001 }
-    - { name: ae-sop, port: 8002, nodePort: 38002 }
   selector: { app: iap-backend }
 
 ---

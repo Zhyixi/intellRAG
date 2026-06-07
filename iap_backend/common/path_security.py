@@ -25,7 +25,7 @@ def resolve_allowed_file_path(
     """
     將使用者傳入的路徑正規化後，確認落在 allowed_roots 底下且為一般檔案。
 
-    與 iap_ae / iap 的 get_image 共用，避免直接讀取系統任意路徑。
+    與靜態檔案 / 圖片讀取 API 共用，避免直接讀取系統任意路徑。
     """
     if not file_info or not str(file_info).strip():
         raise UnsafePathError("empty path")
@@ -44,19 +44,8 @@ def resolve_allowed_file_path(
     return file_path
 
 
-def iap_ae_image_roots() -> list[str]:
+def static_file_roots() -> list[str]:
     return _parse_roots(
-        os.getenv("iap_ae_IMAGE_ROOTS"),
+        os.getenv("STATIC_FILE_ROOTS") or os.getenv("PE_IMAGE_ROOTS"),
         ("/app", "/tmp", "/mnt"),
     )
-
-
-def pe_image_roots() -> list[str]:
-    # 預設涵蓋圖片庫與常見暫存目錄；單元測試常用 /tmp
-    return _parse_roots(
-        os.getenv("PE_IMAGE_ROOTS") or os.getenv("iap_IMAGE_ROOTS"),
-        ("/app/db/images", "/app", "/tmp", "/mnt"),
-    )
-
-
-iap_image_roots = pe_image_roots  # 向後相容

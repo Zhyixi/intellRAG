@@ -8,28 +8,19 @@
 
 ## 1. 專案簡介
 
-本專案為 **IAP Platform**，现以 **IntelliAgnet**（NotebookLM 风格）为主产品，并保留 PE/AE 企业检索 API（向后兼容）。
+本專案為 **IAP Platform**，以 **IntelliAgnet**（NotebookLM 风格）个人笔记本为主产品。
 
 | 模組 | 说明 |
 |------|------|
 | **iap_frontend** | Streamlit — 登录/注册、我的笔记本、文档上传、个人管理 |
 | **iap_backend** | FastAPI — 认证、Notebook RAG、文档 Embedding、Langfuse 用量 |
-| **iap_elasticsearch** | 每用户索引 `iap_nb_{user_id}_file` + 企业索引 |
+| **iap_elasticsearch** | 每用户索引 `iap_nb_{user_id}_file` |
 | **user_uploads** | 用户上传文件目录（Compose 挂载） |
 | **Langfuse** | Token/费用追踪（按 userId 聚合） |
 
 **Notebook 主要 API 前缀：** `/api/v1/auth/*`、`/api/v1/notebook/*`、`/api/v1/account/*`
 
 **环境变量（dev.env）：** `JWT_SECRET`、`ENCRYPTION_KEY`（用户 OpenAI Key 加密）、`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`
-
----
-
-## 1b. 遗留产品线（deprecated API）
-
-仍可通过 API 访问，前端默认不再使用：
-
-- **iap (PE)**：`/api/v1/pe/*` — Power & Energy FACA 案例检索  
-- **iap_ae (AE)**：`/api/v1/ae/*` — AE 设备 / SOP 手册检索  
 
 ---
 
@@ -55,7 +46,7 @@
               LLM 摘要 / 意圖 / 翻譯
 ```
 
-**Agent 編排**：LangGraph `StateGraph`（`services/pe_graphs.py`、`services/ae_graphs.py`）  
+**Agent 編排**：LangGraph `StateGraph`（`services/notebook_graphs.py`）  
 **RAG 核心**：`services/rag_service.py`（ES hybrid：BM25 + KNN + RRF）  
 **追蹤**：Langfuse 4.x + `CallbackHandler` / `@observe`
 
@@ -306,7 +297,6 @@ streamlit run main.py --server.address=0.0.0.0 --server.port=8501
 - `GET /api/v1/iap/history_session_id` — 歷史 session 列表  
 - `GET /api/v1/iap/history_session` — 單一 session 對話  
 - `GET /api/v1/iap/get_image` — 圖片  
-- `GET /api/v1/common/download_pdf` — PDF 下載  
 - `GET /api/v1/common/check_backend` — 健康檢查  
 
 ---
@@ -317,50 +307,23 @@ streamlit run main.py --server.address=0.0.0.0 --server.port=8501
 
 | 前綴 | 模組 | 說明 |
 |------|------|------|
-| `/api/v1/pe` | `fast_api_service/api/pe/` | PE 檢索（原 v3 邏輯）、invoke、歷史、分析 |
-| `/api/v1/ae` | `fast_api_service/api/ae/` | AE 檢索（原 v3 邏輯）、invoke、歷史 |
-| `/api/v1/common/web_search` | `common_api` | 網路搜尋（DuckDuckGo，與 MCP 同源） |
-| `/api/v1/common` | `fast_api_service/api/common_api/` | 健康檢查、PDF、翻譯 |
+| `/api/v1/auth` | `fast_api_service/api/auth/` | 注册、登录 |
+| `/api/v1/notebook` | `fast_api_service/api/notebook/` | 对话、历史、文档上传 |
+| `/api/v1/account` | `fast_api_service/api/account/` | API Key、用量 |
+| `/api/v1/common` | `fast_api_service/api/common_api/` | 健康检查、翻译、网络搜索 |
 
-### 7.2 重要端點（v1）
+### 7.2 Notebook 重要端点
 
-**iap**
+- `POST /api/v1/notebook/chat/retrieve` — 对话检索  
+- `POST /api/v1/notebook/chat/stream` — 流式对话  
+- `POST /api/v1/notebook/documents/upload` — 文档上传与 embedding  
+- `GET /api/v1/notebook/history/session_ids` — 历史 session 列表  
 
-- `POST .../retrieve` — RAG 檢索（body: `role`, `content`, `session_id`, `syslang`）  
-- `POST .../invoke` — Agent 直接分析  
-- `GET .../history_session_id?usr=` — 使用者歷史 session  
-- `GET .../history_session?session_id=` — 單 session 內容  
-- `DELETE .../history_session?session_id=` — 刪除歷史  
-- `GET .../get_image?file_info=&project_name=iap`  
-- `POST .../analyst`、`POST .../analyst-detail` — 統計分析  
+### 7.3 启动与依赖
 
-**iap_ae**：結構類似，見 Swagger `/docs`。
-
-### 7.3 啟動與依賴
-
-- 容器 entrypoint：`iap_backend/entrypoint.sh`（dev 執行 `fast_api_service/main.py`）  
+- 容器 entrypoint：`iap_backend/entrypoint.sh`（dev/prod 均执行 `fast_api_service/main.py`）  
 - DI 容器：`iap_backend/containers.py`  
-- Mongo 對話集合：`iap_Chat_History`、`iap_ae_Chat_History`  
-
-### 7.4 統一 ETL（IAP Platform）
-
-單一服務 `etl/unified_etl_main.py`（埠 **8000**），定期掃描 `rag_doc/inbox/`：
-
-| 目錄 | 行為 |
-|------|------|
-| `inbox/with_embedding/` | 非 PDF → 轉 PDF → 多語 embedding → 索引 `iap_file_{lang}` |
-| `inbox/without_embedding/` | 僅轉 PDF、匯出文字至 `processed/extracted_text/` |
-| `inbox/processed/` | 處理完自動歸檔 |
-
-**Embedding 模式**（`config.ini` `[embedding] mode`）：
-
-- `auto`：本地 BGE-M3 模型存在且 VRAM/RAM 足夠 → `local`，否則全環境 `cloud`（OpenAI Embeddings）
-- `local` / `cloud`：強制指定
-
-手動觸發：`GET http://localhost:8000/run-scan`  
-健康檢查：`GET http://localhost:8000/ping`
-
-舊版分散 ETL（`pe_etl_main`、`ae_etl_main` 等）已改由統一入口取代，僅保留程式碼供參考。
+- Mongo 对话集合：`nb_chat_history`、文档 `nb_documents`
 
 ---
 
@@ -385,7 +348,7 @@ docker exec iap_mysql_dev sh -c "mysql -u root -p123456 LLMFramework < /var/lib/
 docker exec -it iap_mongo_dev mongosh -u root -p 123456 --authenticationDatabase admin
 ```
 
-- 聊天歷史：`LLM.iap_Chat_History`、`LLM.iap_ae_Chat_History`
+- 聊天歷史：`LLM.nb_chat_history`、文档 `LLM.nb_documents`
 
 ### 8.3 Redis
 
@@ -398,7 +361,7 @@ redis-cli -h localhost -p 7379 -a 123456 ping
 
 - **帳密（預設）**：`elastic` / `123456789`  
 - **IK 分詞**：映像 build 時安裝 `elasticsearch-analysis-ik-9.0.1.zip`  
-- **索引命名**：`iap_issue_{lang}`、`iap_file_{lang}`、`iap_ae_issue_{lang}`、`ae_sop_file_{lang}` 等  
+- **索引命名**：Notebook 用户文档 `iap_nb_{user_id}_file`  
 
 詳細備份還原、快照、Kibana 使用者設定見下方 **§10**（整理自 `ReadMeEs.md`）。
 

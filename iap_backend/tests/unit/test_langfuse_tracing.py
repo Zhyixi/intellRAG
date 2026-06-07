@@ -30,17 +30,17 @@ def test_build_agent_run_config_uses_trace_context_handler():
         translator=None,
         version="v3",
         syslang="ZH",
-        intent="ae_faca",
-        trace_name="iap_ae_retrieve_v3",
+        intent="notebook",
+        trace_name="notebook_chat",
         trace_id="abc123",
-        domain="iap_ae",
+        domain="notebook",
         user_role="10038437",
     )
 
     handler = config["callbacks"][0]
     assert getattr(handler, "_trace_context") == {"trace_id": "abc123"}
     assert config["metadata"]["trace_id"] == "abc123"
-    assert config["metadata"]["domain"] == "iap_ae"
+    assert config["metadata"]["domain"] == "notebook"
     assert config["metadata"]["app_env"] == langfuse_environment()
     assert config["metadata"]["user_role"] == "10038437"
     assert config["configurable"]["session_id"] == "session-1"
@@ -103,7 +103,7 @@ def test_build_agent_run_config_without_langfuse_credentials():
         translator=None,
         version="v3",
         syslang="ZH",
-        intent="ae_faca",
-        trace_name="iap_ae_retrieve_v3",
+        intent="notebook",
+        trace_name="notebook_chat",
     )
     assert config["callbacks"] == []

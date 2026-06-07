@@ -75,8 +75,6 @@ def _create_langfuse_handler():
 class Container(containers.DeclarativeContainer): # 定義宣告式容器
     # 註冊需要注入依賴的模組
     wiring_config = containers.WiringConfiguration(modules=[
-        "fast_api_service.api.pe.pe",
-        "fast_api_service.api.ae.ae",
         "fast_api_service.api.auth.auth",
         "fast_api_service.api.notebook.notebook",
         "fast_api_service.api.notebook.documents",
@@ -187,15 +185,6 @@ class Container(containers.DeclarativeContainer): # 定義宣告式容器
     engine=sql_db.provided._engine,
     inspector=sql_db.provided._inspector,
     base=sql_db.provided._base)
-    # iap mysql
-    iap_db = providers.Singleton(Database, db_url="mysql+pymysql://AlvinYC:User%40Compal%21@10.129.137.138:3306/faca")
-    iap_table_manager_repository = providers.Factory(
-    TableManagerRepository,
-    session_factory=iap_db.provided.session,
-    engine=iap_db.provided._engine,
-    inspector=iap_db.provided._inspector,
-    base=iap_db.provided._base)
-    
     # Elasticsearch
     es_client = providers.Singleton(Elasticsearch,
                                     hosts=[f"http://{ES_IP}:{ES_PORT}"],
