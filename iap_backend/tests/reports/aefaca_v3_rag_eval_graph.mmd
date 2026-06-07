@@ -1,0 +1,24 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	init_context(init_context)
+	build_dataset(build_dataset)
+	validate_dataset(validate_dataset)
+	evaluate_dataset(evaluate_dataset)
+	write_report(write_report)
+	print_summary(print_summary)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> init_context;
+	build_dataset --> validate_dataset;
+	evaluate_dataset --> write_report;
+	init_context --> build_dataset;
+	validate_dataset --> evaluate_dataset;
+	write_report --> print_summary;
+	print_summary --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

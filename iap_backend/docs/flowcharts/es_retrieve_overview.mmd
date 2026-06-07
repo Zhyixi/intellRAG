@@ -1,0 +1,16 @@
+flowchart TD
+    A["用户输入 prompt"] --> B["preprocess_lang_node<br/>简繁转换"]
+    B --> C["extract_intent_and_entities_node"]
+    C --> D["sop_entity_extract<br/>get_query_extraction + jieba"]
+    D --> E["QueryExtraction<br/>写入 AgentState"]
+    E --> F["execute_retrieve_node"]
+    F --> G1["faca_retrieve<br/>iap_ae_issue"]
+    F --> G2["faca_retrieve<br/>file"]
+    F --> G3["faca_retrieve<br/>ae_sop_file"]
+    G1 --> H1["es_retrive<br/>复用 query_extraction"]
+    G2 --> H2["es_retrive<br/>复用 query_extraction"]
+    G3 --> H3["es_retrive<br/>复用 query_extraction"]
+    H1 --> I["RRF 合并结果"]
+    H2 --> I
+    H3 --> I
+    I --> J["llm_total_summary"]

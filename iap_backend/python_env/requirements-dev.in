@@ -1,0 +1,8 @@
+# 開發與測試依賴（不裝入 Docker 映像）
+# pip-compile python_env/requirements-dev.in
+
+-r requirements.in
+
+pytest
+pytest-asyncio
+IPython

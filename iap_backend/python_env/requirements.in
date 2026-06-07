@@ -1,0 +1,91 @@
+# PEFACA 後端執行期依賴（變更後請執行: pip-compile python_env/requirements.in）
+# 測試／除錯依賴見 requirements-dev.in
+
+# --- Web / API ---
+uvicorn
+fastapi
+async-timeout
+python-dotenv
+redis
+requests
+regex
+tqdm
+dependency_injector
+alembic
+PyJWT
+passlib[bcrypt]
+bcrypt==4.0.1  # passlib 1.7.x 與 bcrypt>=4.1 不相容
+cryptography
+email-validator
+httpx
+
+# --- 資料庫 ---
+SQLAlchemy
+marshmallow-sqlalchemy
+pymysql
+pymongo
+motor
+aio_pika
+
+# --- Observability / LLM routing ---
+langfuse
+litellm
+langchain-litellm
+
+# --- LangChain / LangGraph ---
+langgraph
+langgraph-checkpoint-mongodb
+langgraph-cli
+langchain-core
+langchain-community
+langchain-openai
+langchain-ollama
+langchain-huggingface
+langchain-elasticsearch
+elasticsearch
+
+# --- ML / Embedding / Rerank ---
+torch
+torchvision
+torchaudio
+transformers
+tokenizers
+safetensors
+huggingface_hub
+scikit-learn
+scipy
+matplotlib
+sentence-transformers
+bitsandbytes==0.44.1
+git+https://github.com/FlagOpen/FlagEmbedding.git
+fastembed
+qdrant_client
+
+# --- 文件與 ETL ---
+PyMuPDF
+PyPDF2
+pdf2image
+pytesseract
+docx2txt
+python-pptx
+Pillow
+protobuf
+sentencepiece
+camelot-py[cv]
+openpyxl
+xlrd
+jieba
+opencc-python-reimplemented
+apscheduler
+pycryptodome
+
+# --- 搜尋 / 向量（部分模組仍引用） ---
+weaviate-client
+hdbscan
+
+# --- MCP / Web search ---
+mcp
+duckduckgo-search
+
+# --- 其他 ---
+langdetect

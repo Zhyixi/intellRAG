@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#8b5cf6" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.9"/>
+    </linearGradient>
+    <radialGradient id="g2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0.4"/>
+    </radialGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- outer ring -->
+  <circle cx="256" cy="256" r="200" stroke="url(#g1)" stroke-width="1.5" opacity="0.35"/>
+  <circle cx="256" cy="256" r="160" stroke="url(#g1)" stroke-width="1" opacity="0.25" stroke-dasharray="8 12"/>
+  <circle cx="256" cy="256" r="120" stroke="url(#g1)" stroke-width="1" opacity="0.2"/>
+  <!-- neural connections -->
+  <g stroke="url(#g1)" stroke-width="1.2" opacity="0.4">
+    <line x1="256" y1="96" x2="180" y2="180"/>
+    <line x1="256" y1="96" x2="332" y2="180"/>
+    <line x1="180" y1="180" x2="128" y2="256"/>
+    <line x1="332" y1="180" x2="384" y2="256"/>
+    <line x1="128" y1="256" x2="180" y2="332"/>
+    <line x1="384" y1="256" x2="332" y2="332"/>
+    <line x1="180" y1="332" x2="256" y2="416"/>
+    <line x1="332" y1="332" x2="256" y2="416"/>
+    <line x1="256" y1="96" x2="256" y2="256"/>
+    <line x1="180" y1="180" x2="332" y2="180"/>
+    <line x1="128" y1="256" x2="384" y2="256"/>
+    <line x1="180" y1="332" x2="332" y2="332"/>
+    <line x1="256" y1="256" x2="180" y2="332"/>
+    <line x1="256" y1="256" x2="332" y2="332"/>
+    <line x1="256" y1="256" x2="180" y2="180"/>
+    <line x1="256" y1="256" x2="332" y2="180"/>
+  </g>
+  <!-- nodes -->
+  <g filter="url(#glow)">
+    <circle cx="256" cy="96" r="14" fill="url(#g1)" opacity="0.85"/>
+    <circle cx="180" cy="180" r="11" fill="url(#g1)" opacity="0.75"/>
+    <circle cx="332" cy="180" r="11" fill="url(#g1)" opacity="0.75"/>
+    <circle cx="128" cy="256" r="10" fill="url(#g1)" opacity="0.7"/>
+    <circle cx="384" cy="256" r="10" fill="url(#g1)" opacity="0.7"/>
+    <circle cx="180" cy="332" r="11" fill="url(#g1)" opacity="0.75"/>
+    <circle cx="332" cy="332" r="11" fill="url(#g1)" opacity="0.75"/>
+    <circle cx="256" cy="416" r="14" fill="url(#g1)" opacity="0.85"/>
+    <circle cx="256" cy="256" r="22" fill="url(#g1)" opacity="0.95"/>
+  </g>
+  <!-- core chip icon -->
+  <rect x="236" y="236" width="40" height="40" rx="6" stroke="url(#g1)" stroke-width="2" fill="none" opacity="0.6"/>
+  <path d="M246 236v-8M266 236v-8M246 276v8M266 276v8M236 246h-8M236 266h-8M276 246h8M276 266h8" stroke="url(#g1)" stroke-width="2" stroke-linecap="round" opacity="0.55"/>
+  <!-- sparkle accents -->
+  <g fill="#06b6d4" opacity="0.5">
+    <circle cx="96" cy="120" r="3"/>
+    <circle cx="416" cy="140" r="2.5"/>
+    <circle cx="88" cy="380" r="2"/>
+    <circle cx="420" cy="360" r="3"/>
+    <circle cx="140" cy="88" r="2"/>
+    <circle cx="380" cy="420" r="2.5"/>
+  </g>
+  <text x="256" y="468" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="600" fill="url(#g1)" opacity="0.45">AI</text>
+</svg>

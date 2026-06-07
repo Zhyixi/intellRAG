@@ -1,0 +1,411 @@
+# ==========================================
+# 1. 密碼保險箱 (Secret) K8s 中的 Secret 用來安全地儲存密碼、金鑰等機密資料，避免明文寫在程式碼中。
+# ==========================================
+apiVersion: v1            # K8s API 的版本
+kind: Secret              # 資源類型：Secret (密碼保險箱)
+metadata:
+  name: iap-auth       # 這個保險箱的名字，後面的應用程式會用這個名字來拿密碼
+type: Opaque              # Opaque 表示這是一般的自訂機密資料格式
+stringData:               # 使用 stringData 允許我們寫「明文」密碼，K8s 存入時會自動幫我們轉換成安全的 Base64 編碼
+  MYSQL_ROOT_PASSWORD: "123456"
+  MONGO_INITDB_ROOT_PASSWORD: "123456"
+  ELASTIC_PASSWORD: "123456789"
+  REDIS_PASSWORD: "123456"
+---
+# ==========================================
+# 2. 環境變數設定 (ConfigMap):用來儲存「非機密」的設定值，例如環境名稱、API 網址或代理伺服器 (Proxy) 設定。
+# ==========================================
+apiVersion: v1
+kind: ConfigMap           # 資源類型：ConfigMap (設定檔)
+metadata:
+  name: iap-config     # 這個設定檔的名字
+data:                     # 下方是具體的鍵值對 (Key-Value) 設定
+  ENV: "dev"
+  PROJECT_PREFIX: "iap"
+  MYSQL_DATABASE: "LLMFramework"
+  # Proxy 設定 - 讓容器可以透過公司的 Proxy 連上外網
+  http_proxy: "http://10.110.16.62:8080"
+  https_proxy: "http://10.110.16.62:8080"
+  # 內部溝通必須排除 Proxy，包含所有 Service 名稱
+  # (如果容器要連線到同一個 K8s 裡面的其他服務，不能走 Proxy，否則會找不到)
+  NO_PROXY: "localhost,127.0.0.1,iap-mysql,iap-redis,iap-mongo,iap-elasticsearch,iap-kibana,10.42.0.0/16,10.43.0.0/16"
+  no_proxy: "localhost,127.0.0.1,iap-mysql,iap-redis,iap-mongo,iap-elasticsearch,iap-kibana,10.42.0.0/16,10.43.0.0/16"
+---
+# ==========================================
+# 3. 流量轉發 (Services)(簡稱 svc) :負責處理網路，它給應用程式一個固定的內部名稱(例如 iap-mysql)。
+# 即使後面的容器重啟、IP 改變，其他程式只要連這個 Service 名稱就能找到它。
+# ==========================================
+#-- MySql --#
+apiVersion: v1
+kind: Service             # 資源類型：Service (網路服務)
+metadata:
+  name: iap-mysql  # 服務名稱，叢集內其他程式可以用 `iap-mysql` 這個 DNS 名稱連到這個資料庫
+spec:
+  type: NodePort # ClusterIP:預設是 ClusterIP，表示只能在 K8s 內部互通
+                 # NodePort：除了內部互通外，還會在「實體主機」上開一個 Port，讓外部電腦可以連進來。
+  ports:
+    - port: 3306       # cluster 內部通訊埠：K8s 內部其他服務連這個 Port
+      targetPort: 3306 # container 內部真正監聽：MySQL 容器真正聽取流量的 Port
+      nodePort: 4306  # 外部機器連線用的埠
+  selector:
+    app: iap-mysql # 標籤選擇器：這個 Service 會把流量轉發給帶有 `app: iap-mysql` 標籤的容器
+---
+#-- Redis --#
+apiVersion: v1
+kind: Service
+metadata:
+  name: iap-redis
+spec:
+  # 這裡沒有寫 type，預設就是 ClusterIP (僅限內部連線)
+  ports: [{ port: 7379, targetPort: 6379 }] # 內部用 7379 連線，轉發給容器內的 6379 Port
+  selector: { app: iap-redis }
+---
+#-- Mongo --#
+apiVersion: v1
+kind: Service
+metadata:
+  name: iap-mongo
+spec:
+  ports: [{ port: 27017, targetPort: 27017 }]
+  selector: { app: iap-mongo }
+---
+#-- Mongo Express (MongoDB 的網頁管理介面) --#
+apiVersion: v1
+kind: Service
+metadata:
+  name: iap-mongo-express-service
+spec:
+  type: NodePort      # 設為 NodePort 讓外部瀏覽器可以看網頁
+  ports:
+    - port: 8081
+      targetPort: 8081
+      nodePort: 8074 # 外部瀏覽器訪問埠：打開瀏覽器輸入 主機IP:8074 即可訪問
+  selector:
+    app: iap-mongo-express
+
+---
+#-- Elasticsearch --#
+apiVersion: v1
+kind: Service
+metadata:
+  name: iap-elasticsearch
+spec:
+  ports: 
+    - { name: http, port: 10200, targetPort: 9200}    # HTTP API 連線用
+    - { name: transport, port: 9300, targetPort: 9300 } # ES 節點間互相溝通用
+  selector: { app: iap-elasticsearch }
+---
+# --- Kibana Service (對外存取介面) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iap-kibana
+spec:
+  type: NodePort
+  ports:
+    - port: 6600      # 叢集內部通訊埠
+      targetPort: 5601 # 容器內部埠：Kibana 預設跑在 5601
+      nodePort: 6600  # 外部瀏覽器訪問埠 (對應你的 KIBANA_PORT)：瀏覽器輸入 主機IP:6600
+  selector:
+    app: iap-kibana
+
+---
+#-- 綜合後端 API 服務 --#
+apiVersion: v1
+kind: Service
+metadata:
+  name: iap-backend-svc
+spec:
+  type: NodePort
+  ports:
+    # 這裡一次定義了多個對外開放的 Port，轉發給同一個後端程式的不同 API 介面
+    - { name: main-api, port: 44000, nodePort: 44000 }
+    - { name: pe-etl, port: 8000, nodePort: 38000 }
+    - { name: ae-etl, port: 8001, nodePort: 38001 }
+    - { name: ae-sop, port: 8002, nodePort: 38002 }
+  selector: { app: iap-backend }
+
+---
+# ==========================================
+# 4. 服務部署 (Deployments)
+# Deployment 是 K8s 管理應用的核心，它負責啟動容器 (Pod)，並確保容器當掉時會自動重啟。
+# ==========================================
+
+# --- Backend (後端程式) ---
+apiVersion: apps/v1
+kind: Deployment          # 資源類型：Deployment (部署)
+metadata:
+  name: iap-backend    # 部署名稱
+spec:
+  replicas: 1             # 副本數：這個程式要同時跑幾個容器 (1 代表跑一個)
+  selector:
+    matchLabels: { app: iap-backend } # K8s 透過這個標籤來辨識哪些容器是歸這個 Deployment 管的
+  template:               # 下面是「容器 (Pod)」的具體藍圖
+    metadata:
+      labels: { app: iap-backend }    # 貼上標籤，讓上面的 selector 找得到、讓 Service 能轉發流量過來
+    spec:
+      containers:         # 容器設定區塊
+      - name: backend     # 容器名稱
+        image: iap_backend:latest # 使用的 Docker 映像檔
+        imagePullPolicy: IfNotPresent # 優先使用本地匯入的鏡像，如果本地找不到才去網路下載
+        workingDir: /app  # 進入容器後的預設工作目錄
+        command: ["/bin/bash", "./entrypoint.sh"] # 容器啟動時要執行的指令
+        # 批量匯入環境變數：把前面定義的 iap-config 裡面的設定全部吃進來
+        envFrom: [{ configMapRef: { name: iap-config } }]
+        env:
+        # 單獨引入密碼：從前面定義的 iap-auth (Secret) 中，把 MYSQL_ROOT_PASSWORD 取出當作環境變數
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom: { secretKeyRef: { name: iap-auth, key: MYSQL_ROOT_PASSWORD } }
+        volumeMounts:     # 儲存空間掛載 (容器內部視角)
+        - name: app-vol   # 掛載點名稱 (需與下方 volumes 對應)
+          mountPath: /app # 容器內部的路徑
+      volumes:            # 儲存空間來源 (實體主機視角)
+      - name: app-vol     # 對應上方 volumeMounts 的名稱
+        # hostPath 代表將實體機器的真實資料夾掛進容器。這樣即使容器砍掉重建，程式碼/資料也還在。
+        hostPath: { path: /mnt/hdd1/Projects/iap/iap_backend }
+
+---
+# --- MySQL (資料庫) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iap-mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: iap-mysql }
+  template:
+    metadata:
+      labels: { app: iap-mysql }
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:latest
+        envFrom: [{ configMapRef: { name: iap-config } }]
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom: { secretKeyRef: { name: iap-auth, key: MYSQL_ROOT_PASSWORD } }
+        volumeMounts:
+        
+        - name: mysql-data
+          mountPath: /var/lib/mysql  # MySQL 預設的資料儲存位置
+        - name: mysql-logs         # <--- 新增掛載點名稱
+          mountPath: /var/log/mysql  # <--- MySQL 容器內預設的日誌路徑
+      volumes:
+      - name: mysql-data
+        hostPath: { path: /mnt/hdd1/Projects/iap/db/mysql_data} # 將資料寫回實體硬碟，確保資料不遺失
+      - name: mysql-logs
+        hostPath: {path: /mnt/hdd1/Projects/iap/db/mysql_logs}  # 將日誌寫回實體硬碟
+
+---
+# --- Redis (快取) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iap-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: iap-redis }
+  template:
+    metadata:
+      labels: { app: iap-redis }
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.0.9
+        # 啟動時加入參數，要求存取 Redis 必須輸入密碼 "123456"
+        command: ["redis-server", "--requirepass", "123456"]
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        hostPath: { path: /mnt/hdd1/Projects/iap/db/redis_data }
+
+---
+# --- MongoDB (文件資料庫) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iap-mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: iap-mongo }
+  template:
+    metadata:
+      labels: { app: iap-mongo }
+    spec:
+      containers:
+      - name: mongo
+        image: mongo:latest
+        # 關鍵修正：加上 --bind_ip_all 讓後端可以連入，保留 --auth (啟用帳密驗證)
+        command: ["mongod", "--auth", "--bind_ip_all"]
+        envFrom: [{ configMapRef: { name: iap-config } }]
+        env:
+        # 從保險箱讀取 Mongo 管理員密碼
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom: { secretKeyRef: { name: iap-auth, key: MONGO_INITDB_ROOT_PASSWORD } }
+        volumeMounts:
+        - name: mongo-data
+          mountPath: /data/db
+      volumes:
+      - name: mongo-data
+        hostPath: { path: /mnt/hdd1/Projects/iap/db/mongo_data }
+
+---
+# --- MongoDB Express (Mongo網頁管理端) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iap-mongo-express
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iap-mongo-express
+  template:
+    metadata:
+      labels:
+        app: iap-mongo-express
+    spec:
+      containers:
+      - name: mongo-express
+        image: mongo-express:latest
+        ports:
+        - containerPort: 8081
+        # 關鍵補強：引入 ConfigMap 確保排除 Proxy，這樣 MongoExpress 才找得到內部的 Mongo
+        envFrom: 
+        - configMapRef:
+            name: iap-config
+        env:
+        - name: ME_CONFIG_MONGODB_SERVER
+          value: "iap-mongo" # 記得用連字號！ (對應前面設定的 Service 名稱)
+        - name: ME_CONFIG_MONGODB_ADMINUSERNAME
+          value: "root"
+        - name: ME_CONFIG_MONGODB_ADMINPASSWORD
+          value: "123456"
+        - name: ME_CONFIG_BASICAUTH
+          value: "false"  # <--- 加上這行，打開網頁時就不會再跳出要求驗證的彈出視窗
+        - name: ME_CONFIG_MONGODB_URL
+          # 完整的資料庫連線字串
+          value: "mongodb://root:123456@iap-mongo:27017/?authSource=admin"
+
+
+---
+# --- Elasticsearch (搜尋引擎) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iap-elasticsearch
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: iap-elasticsearch }
+  template:
+    metadata:
+      labels: { app: iap-elasticsearch }
+    spec:
+      containers:
+      - name: elasticsearch
+        image: elasticsearch:9.0.1
+        env:
+        - name: discovery.type
+          value: "single-node" # 告訴 ES 這是單機運作，不用去尋找其他叢集節點
+        - name: ELASTIC_PASSWORD
+          value: "123456789"   # 設定預設 elastic 帳號的密碼
+        - name: xpack.security.enabled
+          value: "true"        # 開啟安全驗證功能
+        volumeMounts:
+        - name: es-data
+          mountPath: /usr/share/elasticsearch/data
+      volumes:
+      - name: es-data
+        hostPath: { path: /mnt/hdd1/Projects/iap/iap_elasticsearch/elasticsearch-data }
+
+---
+# ==========================================
+# 5. 初始化任務 (Job) - 設定 ES 密碼
+# Job 跟 Deployment 的差別在於，Job 是用來執行「一次性」的任務。
+# 當指令執行成功結束後，容器就會標記為完成 (Completed) 而不會一直重啟。
+# ==========================================
+apiVersion: batch/v1
+kind: Job                 # 資源類型：Job (一次性任務)
+metadata:
+  name: iap-elasticsearch-setup
+spec:
+  template:
+    spec:
+      containers:
+      - name: setup
+        image: curlimages/curl:latest # 使用一個內建 curl 工具的輕量映像檔
+        # 關鍵：必須引入 ConfigMap，否則 curl 會被公司 Proxy 攔截而連不到內部的 ES
+        envFrom:
+        - configMapRef:
+            name: iap-config
+        command:
+        - "sh"
+        - "-c"
+        # 下方是一段 Shell 腳本：
+        # 1. 寫一個迴圈，每隔 5 秒去戳一次 ES，直到 ES 準備好為止
+        # 2. ES 準備好後，打 API 幫內建的 kibana_system 帳號設定密碼
+        - |
+          echo "Waiting for Elasticsearch to be ready..."
+          # 持續測試直到 ES 回應
+          until curl -s http://iap-elasticsearch:10200; do
+            sleep 5
+          done
+          echo "ES is up! Setting kibana_system password..."
+          # 執行密碼設定
+          curl -X POST -u elastic:123456789 'http://iap-elasticsearch:10200/_security/user/kibana_system/_password' \
+          -H 'Content-Type: application/json' \
+          -d '{ "password": "123456789" }'
+          echo "Password for kibana_system set successfully."
+      restartPolicy: OnFailure # 失敗才重試，成功就結束 (Deployment 預設是 Always)
+---
+# --- Kibana Deployment (Kibana 網頁介面實體) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iap-kibana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iap-kibana
+  template:
+    metadata:
+      labels:
+        app: iap-kibana
+    spec:
+      containers:
+      - name: kibana
+        image: kibana:9.0.1 # 使用與 ES 一致的 9.0.1 版本確保相容性
+        envFrom:
+        - configMapRef:
+            name: iap-config  # <--- 關鍵！這行能讓 Kibana 知道 iap-elasticsearch 是內部網路，不用走 Proxy
+        ports:
+        - containerPort: 5601
+        # 關鍵：引入 ConfigMap 以確保 Kibana 不會被 Proxy 攔截
+        # (這裡 envFrom 寫了兩次，語法上沒錯，K8s 會把他們合併處理)
+        envFrom:
+        - configMapRef:
+            name: iap-config
+        env:
+        - name: ELASTICSEARCH_HOSTS
+          value: "http://iap-elasticsearch:10200" # 告訴 Kibana 去哪裡找 Elasticsearch (對應前面的 Service 名稱)
+        - name: ELASTICSEARCH_USERNAME
+          value: "kibana_system"  # Kibana 與 ES 溝通專用的系統帳號
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:              # 密碼一樣從保險箱 (Secret) 裡面拿
+            secretKeyRef:
+              name: iap-auth
+              key: ELASTIC_PASSWORD
+        # ES 8/9 必備的加密金鑰 (從你的 Docker Compose 設定搬過來，確保 Kibana 能夠啟動安全機制)
+        - name: XPACK_SECURITY_ENCRYPTIONKEY
+          value: "changesecretkey1234567890!changesecret"
+        - name: XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY
+          value: "changesecretkey1234567890!secretobj"
+        - name: XPACK_REPORTING_ENCRYPTIONKEY
+          value: "changesecretkey1234567890!reporting"

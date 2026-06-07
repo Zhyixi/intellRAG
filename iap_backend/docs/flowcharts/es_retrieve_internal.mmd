@@ -1,0 +1,45 @@
+flowchart TD
+    Start(["es_retrive 开始"]) --> P0
+
+    subgraph P0 ["Phase 0: 关键字提取"]
+        Q1{"有 query_extraction<br/>从 state 传入?"}
+        Q1 -->|是| M1["复用已有 QueryExtraction"]
+        Q1 -->|否| M2["get_query_extraction<br/>缓存 / inflight 去重 / LLM"]
+        M1 --> M3["_merge_retrieval_keywords<br/>合并简繁变体"]
+        M2 --> M3
+        M3 --> M4["build_lexical_queries<br/>最多 4 个 BM25 variant"]
+        M3 --> M5["build_semantic_query<br/>去噪关键词拼接"]
+    end
+
+    P0 --> P1
+
+    subgraph P1 ["Phase 1: Keyword Lexical Prefilter"]
+        L1{"keyword_prefilter = True?"}
+        L1 -->|否| P2Gate
+        L1 -->|是| L2["对每个 lexical query variant<br/>lexical_search_v2 BM25"]
+        L2 --> L3["_dedupe_hits_by_id<br/>去重取 top lexical_top_k"]
+        L3 --> L4{"lexical_hits 有结果?"}
+    end
+
+    L4 -->|有| S1["取 candidate doc ids"]
+    S1 --> S2["semantic_search_v2 knn<br/>filter: metadata + doc ids"]
+    S2 --> S3{"knn 失败?"}
+    S3 -->|是| S4["降级: 仅 metadata_filter 全域 semantic"]
+    S3 -->|否| S5["retrieval_phase = keyword_prefilter_semantic"]
+    S4 --> S5
+
+    L4 -->|无| F1["semantic_search_v2 knn<br/>全索引 + metadata_filter"]
+    F1 --> F2["_filter_semantic_noise<br/>过滤目录页/过短文本"]
+    F2 --> F3["retrieval_phase = semantic_fallback"]
+
+    L1 -->|否| P2Gate["进入 semantic 分支"]
+    P2Gate --> F1
+
+    S5 --> P3
+    F3 --> P3
+
+    subgraph P3 ["Phase 3: RRF 融合"]
+        R1["hybrid_search_v2<br/>RRF k=60"]
+        R1 --> R2["semantic_weight=1.0<br/>lexical_weight=0.7"]
+        R2 --> End(["返回 target_nodes"])
+    end

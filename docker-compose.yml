@@ -1,0 +1,458 @@
+# 建置參數：由 dev.env / prod.env 的 http_proxy / https_proxy 注入
+# （請用 scripts/compose-dev.sh 或 compose-prod.sh）
+#
+# Secrets: set credentials in dev.env / prod.env (copy from *.env.example).
+# Never commit real passwords in this file; k3s should use Secret resources.
+#
+# --- Timezone (Windows dev + Linux cloud + k3s) ---
+# Use the TZ environment variable instead of bind-mounting host /etc/localtime.
+# Host path mounts are Linux-only, fail or behave oddly on Windows Docker Desktop,
+# and are not how you configure timezone in Kubernetes / k3s.
+# Set TZ in dev.env / prod.env; in k3s use the same in Deployment/StatefulSet:
+#   env: [{ name: TZ, value: Asia/Taipei }]
+x-container-tz: &container-tz
+  TZ: ${TZ:-Asia/Taipei}
+
+x-build-proxy: &build-proxy
+  args:
+    HTTP_PROXY: ${http_proxy:-}
+    HTTPS_PROXY: ${https_proxy:-}
+    http_proxy: ${http_proxy:-}
+    https_proxy: ${https_proxy:-}
+    NO_PROXY: ${no_proxy:-localhost,127.0.0.1}
+    PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+
+# Compose 專案名（與 dev.env / prod.env 的 COMPOSE_PROJECT_NAME 一致，例：iap_dev）
+name: ${COMPOSE_PROJECT_NAME}
+
+# --- Langfuse v3 (local tracing UI: http://localhost:${LANGFUSE_PORT}) ---
+x-langfuse-env: &langfuse-env
+  <<: *container-tz
+  NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
+  DATABASE_URL: postgresql://${LANGFUSE_POSTGRES_USER:-postgres}:${LANGFUSE_POSTGRES_PASSWORD}@iap_langfuse_postgres:5432/${LANGFUSE_POSTGRES_DB:-postgres}
+  SALT: ${LANGFUSE_SALT}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+  TELEMETRY_ENABLED: ${LANGFUSE_TELEMETRY_ENABLED:-false}
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: ${LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES:-false}
+  CLICKHOUSE_MIGRATION_URL: clickhouse://iap_langfuse_clickhouse:9000
+  CLICKHOUSE_URL: http://iap_langfuse_clickhouse:8123
+  CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+  CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_USER:-minio}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD}
+  # 使用 network alias「minio」；iap_langfuse_minio 含底線會觸發 S3 invalid hostname
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_USER:-minio}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:${LANGFUSE_MINIO_PORT:-9090}
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+  REDIS_HOST: iap_langfuse_redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${LANGFUSE_REDIS_PASSWORD}
+  REDIS_TLS_ENABLED: "false"
+
+x-langfuse-depends: &langfuse-depends
+  iap_langfuse_postgres:
+    condition: service_healthy
+  iap_langfuse_minio:
+    condition: service_healthy
+  iap_langfuse_redis:
+    condition: service_healthy
+  iap_langfuse_clickhouse:
+    condition: service_healthy
+
+services:
+  iap_mongo:
+    image: mongo:latest
+    container_name: iap_mongo_${ENV}
+    restart: always
+    init: true
+    volumes:
+      - ./db/mongo_data:/data/db
+    ports:
+      - "${MONGO_PORT}:27017"
+    command: ["mongod", "--auth"]
+    environment:
+      <<: *container-tz
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    networks:
+      - iap_network
+
+  iap_mongo_express:
+    image: mongo-express:latest
+    container_name: iap_mongo_express_${ENV}
+    restart: always
+    init: true
+    ports:
+      - ${MONGO_EXPRESS_PORT}:8081
+    environment:
+      <<: *container-tz
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_ROOT_USER}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_ROOT_PASSWORD}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@iap_mongo:27017/?authSource=admin
+      ME_CONFIG_MONGODB_AUTH_DATABASE: admin
+      ME_CONFIG_BASICAUTH: false
+    networks:
+      - iap_network
+
+  iap_redis:
+    container_name: iap_redis_${ENV}
+    image: redis:7.0.9
+    restart: always
+    init: true
+    ports:
+      - ${REDIS_PORT}:6379
+    working_dir: /app
+    environment:
+      <<: *container-tz
+    volumes:
+      - ./db/redis_config:/usr/local/etc/redis/redis.conf
+      - ./db/redis_data:/data
+      - ./db/redis_logs:/var/log/redis
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass "${REDIS_PASSWORD}"
+    networks:
+      - iap_network
+  
+  iap_mysql:
+    image: mysql:latest
+    tty: true
+    stdin_open: true
+    container_name: iap_mysql_${ENV}
+    restart: always
+    init: true
+    ports:
+      - "${MYSQL_PORT}:3306"
+    environment:
+      <<: *container-tz
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - ./db/mysql_data:/var/lib/mysql
+      # - ${base_path}/${mysql_config}:/etc/mysql/conf.d/my.cnf
+      - ./db/mysql_logs:/var/log/mysql
+    networks:
+      - iap_network
+  
+  iap_elasticsearch:
+    image: iap_elasticsearch:${ENV}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: iap_elasticsearch/Dockerfile.es
+      <<: *build-proxy
+    container_name: iap_elasticsearch_${ENV}
+    environment:
+      <<: *container-tz
+      node.name: elasticsearch
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      path.repo: /usr/share/elasticsearch/snapshots
+      path.logs: /usr/share/elasticsearch/logs
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - ${ES_PORT}:9200
+    volumes:
+      - ./iap_elasticsearch/elasticsearch-data:/usr/share/elasticsearch/data
+      - ./iap_elasticsearch/snapshots:/usr/share/elasticsearch/snapshots
+      - ./iap_elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+      - ./iap_elasticsearch/elasticsearch-analysis-ik-9.0.1.zip:/usr/share/elasticsearch/elasticsearch-analysis-ik-9.0.1.zip
+      - ./db/logs/es_logs:/usr/share/elasticsearch/logs
+    networks:
+      - iap_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:${ELASTIC_PASSWORD} -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # --- 初始化腳本 ---
+  iap_elasticsearch_setup:
+    image: curlimages/curl
+    container_name: iap_elasticsearch_setup_${ENV}
+    depends_on:
+      iap_elasticsearch:
+        condition: service_healthy
+    environment:
+      <<: *container-tz
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+    networks:
+      - iap_network
+    command: >
+      sh -c "
+      echo 'Waiting for ES...';
+      curl -X POST -u elastic:$${ELASTIC_PASSWORD} 'http://iap_elasticsearch:9200/_security/user/kibana_system/_password' -H 'Content-Type: application/json' -d '{\"password\":\"'$${ELASTIC_PASSWORD}'\"}';
+      echo 'Password for kibana_system set successfully.';
+      "
+
+  iap_kibana:
+    image: kibana:9.0.1
+    container_name: iap_kibana_${ENV}
+    restart: always
+    environment:
+      <<: *container-tz
+      ELASTICSEARCH_HOSTS: http://iap_elasticsearch:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD}
+      xpack.security.encryptionKey: ${KIBANA_SECURITY_ENCRYPTION_KEY}
+      xpack.encryptedSavedObjects.encryptionKey: ${KIBANA_SAVED_OBJECTS_ENCRYPTION_KEY}
+      xpack.reporting.encryptionKey: ${KIBANA_REPORTING_ENCRYPTION_KEY}
+    ports:
+      - ${KIBANA_PORT}:5601
+    networks:
+      - iap_network
+    depends_on:
+      - iap_elasticsearch
+
+  iap_langfuse_postgres:
+    image: docker.io/postgres:17
+    container_name: iap_langfuse_postgres_${ENV}
+    restart: always
+    environment:
+      <<: *container-tz
+      POSTGRES_USER: ${LANGFUSE_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${LANGFUSE_POSTGRES_DB:-postgres}
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    networks:
+      - iap_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LANGFUSE_POSTGRES_USER:-postgres}"]
+      interval: 3s
+      timeout: 3s
+      retries: 12
+
+  iap_langfuse_clickhouse:
+    image: docker.io/clickhouse/clickhouse-server
+    container_name: iap_langfuse_clickhouse_${ENV}
+    restart: always
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    networks:
+      - iap_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  iap_langfuse_minio:
+    image: cgr.dev/chainguard/minio
+    container_name: iap_langfuse_minio_${ENV}
+    restart: always
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: ${LANGFUSE_MINIO_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_PASSWORD}
+    ports:
+      - "${LANGFUSE_MINIO_PORT:-9090}:9000"
+      - "127.0.0.1:9091:9001"
+    volumes:
+      - langfuse_minio_data:/data
+    networks:
+      iap_network:
+        aliases:
+          - minio
+          - langfuse-minio
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 8
+      start_period: 5s
+
+  iap_langfuse_redis:
+    image: docker.io/redis:7
+    container_name: iap_langfuse_redis_${ENV}
+    restart: always
+    command: >
+      --requirepass ${LANGFUSE_REDIS_PASSWORD}
+      --maxmemory-policy noeviction
+    volumes:
+      - langfuse_redis_data:/data
+    networks:
+      - iap_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  iap_langfuse_worker:
+    image: docker.io/langfuse/langfuse-worker:3
+    container_name: iap_langfuse_worker_${ENV}
+    restart: always
+    depends_on: *langfuse-depends
+    environment:
+      <<: *langfuse-env
+    networks:
+      - iap_network
+
+  iap_langfuse_web:
+    image: docker.io/langfuse/langfuse:3
+    container_name: iap_langfuse_web_${ENV}
+    restart: always
+    depends_on: *langfuse-depends
+    ports:
+      - "${LANGFUSE_PORT:-3000}:3000"
+    environment:
+      <<: *langfuse-env
+      # Next.js 預設綁 container hostname，127.0.0.1 healthcheck 會失敗
+      HOSTNAME: "0.0.0.0"
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-}
+      LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME:-}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
+    networks:
+      - iap_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/api/public/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+
+  iap_backend:
+    build:
+      context: ./iap_backend/
+      dockerfile: python_env/Dockerfile
+      <<: *build-proxy
+
+    image: iap_backend:${ENV}
+    pull_policy: never
+    init: true
+    container_name: iap_backend_${ENV}
+    working_dir: /app
+    restart: always
+    environment:
+      <<: *container-tz
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      NVIDIA_MPS_ACTIVE_THREAD_PERCENTAGE: "80"
+      ENV: ${ENV}
+      http_proxy: ${http_proxy}
+      https_proxy: ${http_proxy}
+      no_proxy: "localhost,10.129.128.71, 10.110.209.15, 10.110.209.16, 10.110.209.10,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc,.cluster.local,.local,10.0.0.0/8,10.129.137.36"
+      NO_PROXY: "localhost,10.129.128.71, 10.110.209.15, 10.110.209.16, 10.110.209.10,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc,.cluster.local,.local,10.0.0.0/8,10.129.137.36"
+      HF_HOME: /app/models
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL}
+      LANGFUSE_HOST: ${LANGFUSE_BASE_URL}
+      LANGFUSE_TRACING_ENVIRONMENT: ${ENV}
+      JWT_SECRET: ${JWT_SECRET:-change-me-min-32-characters-long-secret}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      USER_UPLOAD_ROOT: /app/user_uploads
+      OPENAI_BASE_URL: http://10.110.209.10:4000/v1
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+
+    # runtime: nvidia
+    depends_on:
+      iap_mysql:
+        condition: service_started
+      iap_redis:
+        condition: service_started
+      iap_mongo:
+        condition: service_started
+      iap_elasticsearch:
+        condition: service_healthy
+      iap_langfuse_web:
+        condition: service_started
+    volumes:
+      - ./iap_backend:/app
+      - ./data:/app/data
+      - ./db:/app/db
+      - ./rag_doc:/app/rag_doc
+      - ./user_uploads:/app/user_uploads
+      - ./docker-compose.yml:/app/docker-compose.yml
+      - ./.gitignore:/app/.gitignore
+      - ./dev.env:/app/dev.env
+      - ./prod.env:/app/prod.env
+      - ${HOME:-${USERPROFILE}}/.continue:/root/.continue
+      - ./.git:/app/.git
+
+    ports:
+      - "${BACKEND_PORT}:44000"
+    entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
+    networks:
+      - iap_network
+
+  iap_frontend:
+    build:
+      context: ./iap_frontend/
+      dockerfile: python_env/Dockerfile
+      <<: *build-proxy
+    image: iap_frontend:${ENV}
+    pull_policy: never
+    container_name: iap_frontend_${ENV}
+    working_dir: /app
+    restart: always
+    environment:
+      <<: *container-tz
+      ENV: ${ENV}
+      BACKEND_IP: iap_backend
+      BACKEND_PORT: 44000
+      http_proxy: ${http_proxy}
+      https_proxy: ${https_proxy}
+      # 內網 Docker 服務名不走 proxy，否則 Squid 無法解析 iap_backend
+      no_proxy: ${no_proxy},iap_backend,iap_mongo,iap_mysql,iap_redis,iap_elasticsearch,localhost,127.0.0.1
+      NO_PROXY: ${no_proxy},iap_backend,iap_mongo,iap_mysql,iap_redis,iap_elasticsearch,localhost,127.0.0.1
+    volumes:
+      - ./iap_frontend:/app
+    ports:
+      - "${FRONTEND_PORT}:8501"
+    entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
+    depends_on:
+      iap_backend:
+        condition: service_started
+    networks:
+      - iap_network
+
+volumes:
+  esdata:
+    driver: local
+  elasticsearch-data:
+    driver: local
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:
+  langfuse_redis_data:
+networks:
+  # Compose bridge network; in k3s use a ClusterIP Service per workload instead.
+  iap_network:
+    driver: bridge
+    name: ${network_name}

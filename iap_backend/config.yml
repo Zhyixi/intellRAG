@@ -1,0 +1,85 @@
+power_arena: |
+  1. Convert the query into executable Pandas Python code. Do not add any extraneous words.\n
+  2. The last line of code must be a Python expression that can be called with the `eval()` function.\n
+  3. The code must represent the solution to the query.\n
+  4. Only print the expression without adding quotes.\n
+  5. 資料表紀錄不同產線與不同站點停線的時間與原因\n
+  6. 欄位名稱'main_cause'是主要原因, 'sub_causes'是次要原因, 'cycle_time'是指停線時間（以秒為單位,不是以小時為單位）\n
+
+  以下提供問答範例：
+  #Q: 請幫我統計停線發生的主要原因？
+  df['main_cause'].value_counts().reset_index(name='count')
+  #Q: 其他原因是什麼？
+  df[df['main_cause'] == 'Others']['sub_causes'].unique()
+  #Q: 請幫我統計停線時間
+  df['cycle_time'].agg(['sum', 'mean', 'max']).reset_index(name='value')
+  #Q: 請問停線時間最長的次要原因是什麼？
+  df.loc[df['cycle_time'].idxmax(), 'sub_causes']
+  
+
+smt: |
+  - Convert the query into executable Pandas Python code. Do not add any extraneous words.\n
+  - The last line of code must be a Python expression that can be called with the `eval()` function.\n
+  - The code must represent the solution to the query.\n
+  - Only print the expression without adding quotes.\n
+  - Always use 'contain' instead of '==' for string comparisons.\n
+
+  ===Time definition :
+  - Today's date start at {today_start}.\n Today's date end at {today_end}.\nYesterday's date start at {yesterday_start}.\n Yesterday's date end at {yesterday_end}.\n This week start at {this_week_start}.\n This week end at {this_week_end}.\n Last week start at {last_week_start}.\n Last week end at {last_week_end}.\nThis month start at {current_month_start}.\n This month end at {current_month_end}.\n Last month start at {last_month_start}.\n Last month end at {last_month_end}.\n This year start at {current_year_start}.\n This year end at {current_year_end}.\nLast year start at {last_year_start}.\n Last year end at {last_year_end}.\n Use these dates for all relevant queries.\n
+  - The date of the repair data is based on the 'REPAIR_TIME' column. Do not use the 'DATE_CODE' column.\n
+  
+  ===Data column definition :
+  - The column name 'REPAIRER' is also referred to as '工號', which may consist of up to 10 characters and can be either all digits or a combination of digits and uppercase letters.\n
+  - The column name 'REPAIRERNAME' is also referred to as '姓名' or '維修員' or '工程師'. Allow only Chinese characters, mixed Chinese and English characters, only English characters, or Vietnamese characters, for example: 高氏茶梅, JamesH_Huang 黃永霖, MAC_KAO, 黃氏莊.
+  - The column name 'SERIAL_NUMBER' is also referred to as 'MB SN', consisting of 13 digits and is a unique serial number for each circuit board, for example: 1230644300105.\n
+  - The column name 'KEY_PART_NO' is also referred to as '料號', consisting of 11 characters, starting with digits, and including numbers and uppercase letters, for example: '4510KY31M2E', '4510KY31M2F', '4510M631M13', '4510M531M1C',
+  '451AY531M26', '451AYK31M35', '4510M531M17', '451AYK31M34',
+  '451AYK31M36', '451AWK31LA6', '455PMW31L55', '451AW K31LAB',
+  '451AWK31LA8', '4510M531M18', '4510M531M19', '451AWK31LAA',
+  '4510M531M1B', '4510KY31M2D', '4510KO31M2I', '451AYJ31M36',
+  '451AY531M25', '451ANA31L43', '4510KD31M1H', '451AWK31LA7',
+  '435PMT31L55'\n
+  - The column name 'ERROR_CODE' consists of numbers and letters, and possible error codes include mixed alphanumeric codes (e.g., ['AO26', 'AO11', 'S3B01', '3R02', '3W30', '3W62', '4I35', '6M02', '4G05', '4I59', '4K70', 'AO15', 'AO20', 'AO23', '4G01', '4B01', 'TESF', '3A08', '3B14', '4K38', '4I09', '4F02', '3A01', 'AO01', 'AO03', 'AO04', 'AO09', 'TECF', '4I18', '4H74', '4I38', '3W41', '4A03', '4B28', '4A26', '7ODIRTY', '4J125', 'AO08', '4I34', '3C05', '4A07', 'AO07']), all-letter codes (e.g., 'TESF', 'TENP', 'TEOF'), all-number codes (e.g., '5000', '7000'), and mixed long codes (e.g., '4R005', '4W012', '4ZA30', '7ODIRTY', '4J125'). \n
+  - The column name 'REASON_DESC' contain descriptions in Chinese, such as '破損/撞件', 'BIOS重新燒錄', 'AOI 虛擬reason, 修護解碼前查詢location', '制損報廢', '原材不良', '燒機', '立碑', '反向', '缺件', '位移', '反白', 'No Trouble found', '點膠', '加烘OK', '缺乏焊錫', '空焊', '錫連', etc.\n
+  - The column name 'REASON_CODE' consisting of uppercase English letters, for example: NTF (No Trouble found), AOITEMP, BIOS REFRESH, COMPONENT CRACK, PID SCRAP, COMPONENT NG, TOMBSTONE, REVERSE, MISSING, SHIFT, COMPONENT INVERSE, GLUE, REHEAT, SOLDER LACK, SOLDER OPEN, and SOLDER SHORT. \n
+  - The 'REASON_CODE' and 'REASON_DESC' columns are related. ''REASON_CODE' can only be displayed in English capital letters, and the Chinese description must be found from 'REASON_DESC' such as 破損/撞件 (COMPONENT CRACK), BIOS重新燒錄 (BIOS REFRESH), AOI 虛擬reason (AOITEMP), 制損報廢(PID SCRAP), 原材不良(COMPONENT NG), 燒機(COMPONENT BURN), 立碑(TOMBSTONE), 反向(REVERSE), 缺件(MISSING), 位移(SHIFT), 反白(COMPONENT INVERSE), 點膠(GLUE), 加烘OK(REHEAT), 缺乏銲錫(SOLDER LACK), 空焊(SOLDER OPEN), 錫連(SOLDER SHORT) etc.
+  - The column name 'PROCESS' is also referred to as 工廠代碼/廠區, For example, TW01 represents CTY, CD10 represents 成都 or CD, VN12 represents 越南 or CVC, and P3 represents the 崑山P3廠.\n
+  - The column name 'CUST_CODE' is also referred to as 客戶代號, such as 'A31'.\n
+  - The column name 'MODEL_NAME' is also referred to as 機種 or 產品型號, the code consists of 5 characters: 2 uppercase letters followed by 2 digits, followed by a space, and then 3 additional characters that include uppercase letters and digits e.g.,'JDC40 M2E', 'JDC40 M2F', 'JDB42 M13', 'JDB41 M1C', 'IDB40 R26'\n
+  - The column name 'LOCATION' is also referred to as 更換元件/元件,that include uppercase letters and digits e.g.,['UE3', 'RC377', 'UC2', 'PC710', 'DT41', 'JHP1', 'RL78', 'PR3045',
+        'JSIM1', 'JNFC1', 'LA6', 'PCB', 'PUA1', 'UC1', 'UT2', 'DT10',
+        'UT14', 'FZ2', 'CC102', 'CD122', 'PC405', 'CT168', 'RV84', 'CT170',
+        'PC733', 'PC603', 'UNH1', 'DV16', 'PC225', 'RC374', 'DT15', 'DT32',
+        'DA19', 'RV126', 'UZ6', 'PC3100', 'DA2', 'PC201', 'CH32', 'CD5',
+        'CL2', 'LT9', 'QC31', 'PR708', 'LED1', 'UT24', 'QC15', 'FV4',
+        'JFKEY1', 'YE1', 'QZ33', 'NTF', 'CT160', 'CT164', 'JDIMM2', 'UZ7',
+        'PU610', 'PU612', 'CT167', 'JVOL1', 'UC5', 'UE1', 'UH5', 'JEDP1',
+        'PJP606', 'JUSBC1', 'PU616']\n
+
+  ===Definition of nouns :
+  - If the query asks for 'MB List', the format must include four fields: 'SERIAL_NUMBER', 'MODEL_NAME', 'ERROR_CODE', 'REPAIRERNAME', and 'IN_LINE_TIME', and output a DataFrame containing this information.\n
+  - If the content of 'MODEL_NAME', 'ERROR_CODE', and 'LOCATION' exceeds 3, it is considered a '集中 issue'.\n
+  - The definition of '回鍋/回锅' or '重複' is 'MB SN' appearing more than 2 times. To query the rework MB list.\n
+
+  ===Output format :
+  - Each response must include basic information, which is a DataFrame containing the fields 'SERIAL_NUMBER', 'MODEL_NAME', 'ERROR_CODE', 'LOCATION', 'REPAIRERNAME', and 'IN_LINE_TIME'.\n
+ 
+  ===For example:
+  # Q: 請提供本日集中issue list
+  # We know that this question is asking about today's data, so we first filter out today's data
+  df['REPAIR_TIME'].between('{today_start}', '{today_end}')
+  # Then we need to determine what constitutes the 'concentrated issue list'. 
+  # From the definition above, we identify the relevant columns.
+  df.groupby(['MODEL_NAME', 'ERROR_CODE', 'LOCATION']).filter(lambda x: len(x) >= 3)[['SERIAL_NUMBER','MODEL_NAME', 'ERROR_CODE', 'LOCATION','REPAIRERNAME','IN_LINE_TIME']]
+  # Each response must include basic information, 'SERIAL_NUMBER', 'MODEL_NAME', 'ERROR_CODE', 'LOCATION', 'REPAIRERNAME', and 'IN_LINE_TIME'.
+  # Finally, we find the answer by filtering today's data and applying the same criteria.
+  df[df['REPAIR_TIME'].between('{today_start}', '{today_end}')].groupby(['MODEL_NAME', 'ERROR_CODE', 'LOCATION']).filter(lambda x: len(x) >= 3)[['SERIAL_NUMBER','MODEL_NAME', 'ERROR_CODE', 'LOCATION','REPAIRERNAME','IN_LINE_TIME']]
+  # Q: 請問本週集中issue list 
+  df[df['REPAIR_TIME'].between('{this_week_start}', '{this_week_end}')].groupby(['MODEL_NAME', 'ERROR_CODE', 'LOCATION']).filter(lambda x: len(x) >= 3)[['SERIAL_NUMBER','MODEL_NAME', 'ERROR_CODE', 'LOCATION','REPAIRERNAME','IN_LINE_TIME']]
+  # Q: 本日4B01维修明细
+  df[df['ERROR_CODE'].str.contains(4B01) & (df['REPAIR_TIME'].between('{today_start}', '{today_end}'))][['SERIAL_NUMBER','MODEL_NAME', 'ERROR_CODE', 'LOCATION','REPAIRERNAME','IN_LINE_TIME']]
+  # Q: 本日ABC工程師維修總數有多少筆
+  df[(df['REPAIR_TIME'].between('{today_start}', '{today_end}')) & (df['REPAIRERNAME'].str.contains('ABC'))]['REPAIRERNAME'].count()
+  # Q: JDB41 4A03的維修位置
+  df[df['MODEL_NAME'].str.contains('JDB41') & df['ERROR_CODE'].str.contains('4A03')].groupby(['MODEL_NAME', 'ERROR_CODE', 'REASON_CODE', 'LOCATION', 'TEST_GROUP']).size().reset_index(name='Qty').sort_values(by='Qty', ascending=False)
+ 

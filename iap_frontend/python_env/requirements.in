@@ -1,0 +1,32 @@
+# PEFACA 前端執行期依賴（變更後請執行: pip-compile python_env/requirements.in）
+
+# --- Streamlit UI ---
+streamlit
+streamlit-feedback
+streamlit-cookies-manager
+
+# --- HTTP / 設定 ---
+requests
+python-dotenv
+PyYAML
+
+# --- 資料處理 ---
+pandas
+numpy
+Pillow
+
+# --- 認證 ---
+ldap3
+
+# --- DB 連線（common/db.py） ---
+SQLAlchemy
+psycopg2-binary
+mysql-connector-python
+pyodbc
+neo4j
+pymongo
+
+# --- E2E（Playwright；容器内 pytest tests/e2e） ---
+pytest
+pytest-playwright
+playwright
