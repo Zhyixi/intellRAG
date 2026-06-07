@@ -127,17 +127,13 @@ def delete_history_session(token: str, session_id: str) -> dict:
 def upload_document(token: str, file_bytes: bytes, filename: str) -> dict:
     headers = {"Authorization": f"Bearer {token}"}
     files = {"file": (filename, file_bytes)}
-    kwargs = {
-        "timeout": DEFAULT_TIMEOUT,
-        "proxies": _BACKEND_PROXIES,
-        "headers": headers,
-        "files": files,
-    }
     try:
         resp = requests.post(
             notebook_api_url.documents_upload,
-            **kwargs,
+            headers=headers,
+            files=files,
             timeout=UPLOAD_TIMEOUT,
+            proxies=_BACKEND_PROXIES,
         )
         if resp.status_code in (200, 201):
             return {"data": resp.json(), "status_code": resp.status_code}

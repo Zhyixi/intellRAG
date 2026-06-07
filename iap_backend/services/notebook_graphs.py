@@ -225,7 +225,7 @@ async def load_memory_node(state: NotebookState, config: RunnableConfig) -> dict
 
 
 async def retrieve_docs_node(state: NotebookState, config: RunnableConfig) -> dict:
-    _emit_status("retrieve_docs", tool="faca_retrieve")
+    _emit_status("retrieve_docs", tool="retrieve")
     retrice_service = config["configurable"].get("retrice_service")
     user_id = config["configurable"].get("user_id")
     user_input = state.get("user_query") or _last_user_message(state)
@@ -236,7 +236,7 @@ async def retrieve_docs_node(state: NotebookState, config: RunnableConfig) -> di
         metadata_filter = {"user_id": str(user_id)}
         try:
             extraction = retrice_service._heuristic_query_extraction(str(user_input))
-            results, _ = await retrice_service.faca_retrieve(
+            results, _ = await retrice_service.retrieve(
                 prompt=str(user_input),
                 index_name=index_name,
                 metadata_filter=metadata_filter,
@@ -248,7 +248,7 @@ async def retrieve_docs_node(state: NotebookState, config: RunnableConfig) -> di
             results = []
 
     detail = f"找到 {len(results)} 個文件片段" if results else "未找到相關文件片段"
-    _emit_status("retrieve_docs", tool="faca_retrieve", detail=detail)
+    _emit_status("retrieve_docs", tool="retrieve", detail=detail)
     source, raw_context = _extract_sources(results) if results else ([], "")
     return {
         "retrieval_results": results,

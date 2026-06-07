@@ -1459,7 +1459,7 @@ class RetriveService(RAGService):
         """
         RAG 檢索入口：包裝 es_retrive 並回傳 Document 列表。
 
-        上游 faca_retrieve 會并行呼叫此函數 3 次（issue / file / sop_file），
+        上游 retrieve 會并行呼叫此函數 3 次（issue / file / sop_file），
         並传入相同的 query_extraction 以避免重复 LLM 提取。
         """
         chat_response = "檢索結果:"
@@ -1653,7 +1653,7 @@ class RetriveService(RAGService):
             )
         )
     
-    async def faca_retrieve(
+    async def retrieve(
         self,
         prompt,
         index_name='iap',
