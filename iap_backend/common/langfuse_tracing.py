@@ -334,3 +334,162 @@ def flush_langfuse_client(langfuse_client: Any) -> None:
         langfuse_client.flush()
     except Exception as exc:
         logger.debug("langfuse flush skipped: %s", exc)
+
+
+def flush_langfuse() -> None:
+    """Flush the process-global Langfuse client (e.g. after background jobs)."""
+    if not langfuse_configured():
+        return
+    try:
+        flush_langfuse_client(get_client())
+    except Exception as exc:
+        logger.debug("langfuse flush skipped: %s", exc)
+
+
+def estimate_embedding_tokens(texts: list[str]) -> int:
+    """Rough token estimate for embedding usage/cost when provider omits counts."""
+    if not texts:
+        return 0
+    return max(1, sum(len(t) for t in texts) // 4)
+
+
+def _embedding_model_name(model: Any) -> str:
+    for attr in ("model", "model_name"):
+        value = getattr(model, attr, None)
+        if value:
+            return str(value)
+    return type(model).__name__
+
+
+class LangfuseObservedEmbeddings:
+    """Wrap LangChain Embeddings so each embed call emits a Langfuse generation."""
+
+    def __init__(self, inner: Any):
+        self._inner = inner
+
+    def embed_documents(self, texts: list[str], **kwargs: Any) -> list[list[float]]:
+        if not langfuse_configured() or not texts:
+            return self._inner.embed_documents(texts, **kwargs)
+        trace_id, parent_span_id = get_active_trace_context()
+        if not trace_id:
+            return self._inner.embed_documents(texts, **kwargs)
+
+        client = get_client()
+        trace_context: TraceContext = {"trace_id": trace_id}
+        if parent_span_id:
+            trace_context["parent_span_id"] = parent_span_id
+
+        model = _embedding_model_name(self._inner)
+        if len(texts) == 1:
+            generation_input: Any = texts[0][:500]
+        else:
+            generation_input = {
+                "batch_size": len(texts),
+                "char_count": sum(len(t) for t in texts),
+            }
+
+        with client.start_as_current_observation(
+            as_type="generation",
+            name="embed_documents",
+            trace_context=trace_context,
+            model=model,
+            input=generation_input,
+            metadata={"text_count": len(texts)},
+        ) as generation:
+            try:
+                vectors = self._inner.embed_documents(texts, **kwargs)
+                tokens = estimate_embedding_tokens(texts)
+                generation.update(
+                    output={
+                        "vector_count": len(vectors),
+                        "dimensions": len(vectors[0]) if vectors else 0,
+                    },
+                    usage={"input": tokens, "output": 0, "total": tokens},
+                )
+                return vectors
+            except Exception as exc:
+                generation.update(level="ERROR", status_message=str(exc))
+                raise
+
+    def embed_query(self, text: str, **kwargs: Any) -> list[float]:
+        if not langfuse_configured():
+            return self._inner.embed_query(text, **kwargs)
+        trace_id, parent_span_id = get_active_trace_context()
+        if not trace_id:
+            return self._inner.embed_query(text, **kwargs)
+
+        client = get_client()
+        trace_context: TraceContext = {"trace_id": trace_id}
+        if parent_span_id:
+            trace_context["parent_span_id"] = parent_span_id
+
+        model = _embedding_model_name(self._inner)
+        with client.start_as_current_observation(
+            as_type="generation",
+            name="embed_query",
+            trace_context=trace_context,
+            model=model,
+            input=text[:500],
+            metadata={"text_count": 1},
+        ) as generation:
+            try:
+                vector = self._inner.embed_query(text, **kwargs)
+                tokens = estimate_embedding_tokens([text])
+                generation.update(
+                    output={"dimensions": len(vector)},
+                    usage={"input": tokens, "output": 0, "total": tokens},
+                )
+                return vector
+            except Exception as exc:
+                generation.update(level="ERROR", status_message=str(exc))
+                raise
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+def wrap_embedding_model_for_tracing(embedding_model: Any) -> Any:
+    """Return a Langfuse-instrumented embeddings wrapper when tracing is enabled."""
+    if not langfuse_configured() or isinstance(embedding_model, LangfuseObservedEmbeddings):
+        return embedding_model
+    return LangfuseObservedEmbeddings(embedding_model)
+
+
+@contextmanager
+def embedding_page_observation(
+    *,
+    page_num: int,
+    page_index: int,
+    total_pages: int,
+    doc_id: str,
+    filename: str,
+    char_count: int,
+) -> Iterator[None]:
+    """Nest a per-page span under the active embedding job trace."""
+    if not langfuse_configured():
+        yield
+        return
+
+    trace_id, parent_span_id = get_active_trace_context()
+    if not trace_id:
+        yield
+        return
+
+    client = get_client()
+    trace_context: TraceContext = {"trace_id": trace_id}
+    if parent_span_id:
+        trace_context["parent_span_id"] = parent_span_id
+
+    with client.start_as_current_observation(
+        name="notebook_embed_page",
+        as_type="span",
+        trace_context=trace_context,
+        input={"page": page_num, "chars": char_count},
+        metadata={
+            "doc_id": doc_id,
+            "filename": filename,
+            "page_index": page_index,
+            "total_pages": total_pages,
+        },
+    ):
+        yield

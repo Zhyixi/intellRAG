@@ -12,6 +12,11 @@ from etl.pdf_pipeline import is_supported_file, prepare_pdf, read_pdf_pages, sho
 from LLM.RagEngine.build_image import build_pdf_image
 from langfuse import observe
 
+from common.langfuse_tracing import (
+    embedding_page_observation,
+    flush_langfuse,
+    wrap_embedding_model_for_tracing,
+)
 from services.job_service import JobService
 from services.llm_factory import create_embedding_model, user_index_name
 from services.services import MongoService
@@ -220,7 +225,7 @@ async def process_document_job(
             )
 
         indexed = int(checkpoint.get("indexed_chunks") or doc.get("indexed_chunks") or 0)
-        embedding = create_embedding_model(api_key)
+        embedding = wrap_embedding_model_for_tracing(create_embedding_model(api_key))
         old_embedding = rag_service.embedding_model
         rag_service.embedding_model = embedding
         rag_service._vector_stores.pop(index_name, None)
@@ -302,12 +307,20 @@ async def process_document_job(
                     indexed_chunks=indexed,
                 )
 
-                await rag_service.build_nodes(
-                    index_name=index_name,
-                    text_content=content,
-                    metadata=metadata,
-                    node_type="file",
-                )
+                with embedding_page_observation(
+                    page_num=int(page_num),
+                    page_index=idx,
+                    total_pages=total,
+                    doc_id=doc_id,
+                    filename=filename,
+                    char_count=len(content),
+                ):
+                    await rag_service.build_nodes(
+                        index_name=index_name,
+                        text_content=content,
+                        metadata=metadata,
+                        node_type="file",
+                    )
                 indexed += 1
                 checkpoint = {
                     "next_page_index": idx + 1,
@@ -374,6 +387,7 @@ async def process_document_job(
             )
             job_service.fail(job_id, str(exc))
     finally:
+        flush_langfuse()
         if lock_acquired:
             job_service.release_lock(doc_id, job_id)
 
