@@ -79,6 +79,7 @@ def _prepare_notebook_run(
     mongo_service: MongoService,
     streaming: bool,
     checkpointer: MongoDBSaver,
+    langfuse_client=None,
 ) -> tuple[str, str, object, MemoryService, MongoDBSaver, dict]:
     session_id = body.session_id or str(uuid.uuid4())
     user_input = _validate_chat_request(body)
@@ -109,6 +110,8 @@ def _prepare_notebook_run(
     run_config["configurable"]["session_id"] = session_id
     run_config["configurable"]["confirm_web_search"] = body.confirm_web_search
     run_config["configurable"]["web_search_query"] = body.web_search_query
+    run_config["configurable"]["langfuse_client"] = langfuse_client
+    run_config["configurable"]["langfuse_prompt_label"] = body.langfuse_prompt_label or "production"
 
     return session_id, user_input, llm, memory_service, checkpointer, run_config
 
@@ -162,6 +165,7 @@ async def notebook_chat(
     retrice_service: RetriveService = Depends(Provide[Container.retrive_service]),
     session: Session = Depends(_get_db_session),
     checkpointer: MongoDBSaver = Depends(Provide[Container.mongo_checkpointer]),
+    langfuse_client=Depends(Provide[Container.langfuse_client]),
 ):
     session_id, user_input, llm, memory_service, checkpointer, run_config = _prepare_notebook_run(
         body=body,
@@ -171,6 +175,7 @@ async def notebook_chat(
         mongo_service=mongo_service,
         streaming=False,
         checkpointer=checkpointer,
+        langfuse_client=langfuse_client,
     )
 
     started_at = datetime.datetime.now()
@@ -200,6 +205,8 @@ async def notebook_chat(
         suggested_questions=final_state.get("suggested_questions", []),
         offer_web_search=bool(final_state.get("offer_web_search")),
         pending_web_search_query=final_state.get("pending_web_search_query", "") or "",
+        needs_clarification=bool(final_state.get("needs_clarification")),
+        answered_from_memory=bool(final_state.get("answered_from_memory")),
     )
 
 
@@ -213,6 +220,7 @@ async def notebook_chat_stream(
     retrice_service: RetriveService = Depends(Provide[Container.retrive_service]),
     session: Session = Depends(_get_db_session),
     checkpointer: MongoDBSaver = Depends(Provide[Container.mongo_checkpointer]),
+    langfuse_client=Depends(Provide[Container.langfuse_client]),
 ):
     session_id, user_input, llm, memory_service, checkpointer, run_config = _prepare_notebook_run(
         body=body,
@@ -222,6 +230,7 @@ async def notebook_chat_stream(
         mongo_service=mongo_service,
         streaming=True,
         checkpointer=checkpointer,
+        langfuse_client=langfuse_client,
     )
     started_at = datetime.datetime.now()
 
@@ -244,6 +253,10 @@ async def notebook_chat_stream(
                             "offer_web_search": event.get("offer_web_search", False),
                             "pending_web_search_query": event.get(
                                 "pending_web_search_query", ""
+                            ),
+                            "needs_clarification": event.get("needs_clarification", False),
+                            "answered_from_memory": event.get(
+                                "answered_from_memory", False
                             ),
                         }
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"

@@ -1,0 +1,18 @@
+# SearXNG config for IAP (internal metasearch). Mount at /etc/searxng in container.
+use_default_settings: true
+
+server:
+  secret_key: "iap-dev-searxng-change-in-production"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  default_lang: "zh-TW"
+  formats:
+    - html
+    - json
+
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 15.0

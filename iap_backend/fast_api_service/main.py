@@ -37,15 +37,15 @@ tags_metadata = [
     },
     {
         "name": "iap-auth",
-        "description": f"{PLATFORM_NAME} — 用户注册登录。",
+        "description": f"{PLATFORM_NAME} — 用戶註冊登入。",
     },
     {
         "name": "iap-notebook",
-        "description": f"{PLATFORM_NAME} — 个人笔记本 API。",
+        "description": f"{PLATFORM_NAME} — 個人筆記本 API。",
     },
     {
         "name": "iap-account",
-        "description": f"{PLATFORM_NAME} — 个人管理（API Key / 用量）。",
+        "description": f"{PLATFORM_NAME} — 個人管理（API Key / 用量）。",
     },
 ]
 

@@ -336,6 +336,38 @@ def flush_langfuse_client(langfuse_client: Any) -> None:
         logger.debug("langfuse flush skipped: %s", exc)
 
 
+@contextmanager
+def observe_tool_span(
+    *,
+    name: str,
+    input: Any = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> Iterator[Any]:
+    """Record a Langfuse tool span (e.g. web search MCP tool) under the active trace."""
+    if not langfuse_configured():
+        yield None
+        return
+
+    trace_id, parent_span_id = get_active_trace_context()
+    if not trace_id:
+        yield None
+        return
+
+    client = get_client()
+    trace_context: TraceContext = {"trace_id": trace_id}
+    if parent_span_id:
+        trace_context["parent_span_id"] = parent_span_id
+
+    with client.start_as_current_observation(
+        as_type="tool",
+        name=name,
+        trace_context=trace_context,
+        input=input,
+        metadata=metadata or {},
+    ) as observation:
+        yield observation
+
+
 def flush_langfuse() -> None:
     """Flush the process-global Langfuse client (e.g. after background jobs)."""
     if not langfuse_configured():

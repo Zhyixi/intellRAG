@@ -14,6 +14,8 @@ from views.strings import (
     CHAT_INPUT_PLACEHOLDER,
     CHAT_REQUEST_FAILED,
     CHAT_THINKING,
+    CHAT_STEPS_TITLE,
+    CHAT_STEP_DONE,
     CHAT_TOOL_PREFIX,
     CHAT_WELCOME,
     CITATION_LINE,
@@ -98,9 +100,23 @@ def _run_stream_chat(
 
     with st.chat_message("assistant"):
         status_line = st.empty()
+        steps_box = st.empty()
         tools_box = st.empty()
         text_box = st.empty()
         tool_lines: list[str] = []
+        step_lines: list[str] = []
+        seen_steps: set[str] = set()
+
+        def _append_step(msg: str, detail: str = "") -> None:
+            key = f"{msg}|{detail}"
+            if key in seen_steps:
+                return
+            seen_steps.add(key)
+            line = f"{CHAT_STEP_DONE} {msg}"
+            if detail:
+                line = f"{line} — {detail}"
+            step_lines.append(line)
+            steps_box.markdown(f"**{CHAT_STEPS_TITLE}**\n\n" + "\n".join(step_lines))
 
         status_line.caption(CHAT_THINKING)
         for event in chat_stream(
@@ -118,11 +134,19 @@ def _run_stream_chat(
             if etype in ("status", "node"):
                 msg = event.get("message") or event.get("node") or ""
                 status_line.caption(f"{CHAT_THINKING} — {msg}")
+                detail = event.get("detail") or ""
+                if etype == "node" and msg:
+                    _append_step(msg, detail)
                 tool = event.get("tool")
-                detail = event.get("detail") or msg
                 if tool:
-                    tool_lines.append(f"{CHAT_TOOL_PREFIX}: **{tool}** — {detail}")
+                    tool_detail = detail or msg
+                    tool_lines.append(f"{CHAT_TOOL_PREFIX}: **{tool}** — {tool_detail}")
                     tools_box.markdown("\n".join(f"- {line}" for line in tool_lines))
+            elif etype == "step":
+                msg = event.get("message") or event.get("node") or ""
+                detail = event.get("detail") or ""
+                if msg and event.get("completed", True):
+                    _append_step(msg, detail)
             elif etype == "token":
                 reply += event.get("content") or ""
                 text_box.markdown(reply)
@@ -132,6 +156,11 @@ def _run_stream_chat(
                 suggested = event.get("suggested_questions") or []
                 offer_web = bool(event.get("offer_web_search"))
                 pending_query = event.get("pending_web_search_query") or ""
+                for step in event.get("steps") or []:
+                    _append_step(
+                        step.get("message") or step.get("node") or "",
+                        step.get("detail") or "",
+                    )
                 text_box.markdown(reply)
                 status_line.empty()
 

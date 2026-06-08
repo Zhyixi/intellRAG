@@ -85,6 +85,7 @@ hdbscan
 
 # --- MCP / Web search ---
 mcp
+ddgs
 duckduckgo-search
 
 # --- 其他 ---

@@ -73,7 +73,7 @@ route_web_search = get_url_path(url=common_url.web_search)
 
 @router.post(route_web_search, response_model=WebSearchResponse)
 async def search_web_endpoint(body: WebSearchRequest):
-    """網路搜尋（DuckDuckGo），與 MCP tool `search_web` 同源。"""
+    """網路搜尋（SearXNG → DuckDuckGo fallback），與 MCP tool `search_web` 同源。"""
     endpoint = route_web_search
     try:
         raw = web_search(body.query, max_results=body.max_results)

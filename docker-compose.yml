@@ -342,6 +342,27 @@ services:
       retries: 20
       start_period: 90s
 
+  iap_searxng:
+    image: searxng/searxng:latest
+    container_name: iap_searxng_${ENV}
+    restart: always
+    init: true
+    environment:
+      <<: *container-tz
+      SEARXNG_BASE_URL: http://iap_searxng:8080/
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    ports:
+      - "${SEARXNG_PORT:-8088}:8080"
+    networks:
+      - iap_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
   iap_backend:
     build:
       context: ./iap_backend/
@@ -363,8 +384,8 @@ services:
       ENV: ${ENV}
       http_proxy: ${http_proxy}
       https_proxy: ${http_proxy}
-      no_proxy: "localhost,10.129.128.71, 10.110.209.15, 10.110.209.16, 10.110.209.10,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc,.cluster.local,.local,10.0.0.0/8,10.129.137.36"
-      NO_PROXY: "localhost,10.129.128.71, 10.110.209.15, 10.110.209.16, 10.110.209.10,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc,.cluster.local,.local,10.0.0.0/8,10.129.137.36"
+      no_proxy: "localhost,10.129.128.71, 10.110.209.15, 10.110.209.16, 10.110.209.10,127.0.0.1,::1,iap_searxng,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc,.cluster.local,.local,10.0.0.0/8,10.129.137.36"
+      NO_PROXY: "localhost,10.129.128.71, 10.110.209.15, 10.110.209.16, 10.110.209.10,127.0.0.1,::1,iap_searxng,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.svc,.cluster.local,.local,10.0.0.0/8,10.129.137.36"
       HF_HOME: /app/models
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
@@ -378,9 +399,14 @@ services:
       OPENAI_BASE_URL: http://10.110.209.10:4000/v1
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-chain}
+      SEARXNG_URL: ${SEARXNG_URL:-http://iap_searxng:8080}
+      WEB_SEARCH_TIMEOUT: ${WEB_SEARCH_TIMEOUT:-15}
 
     # runtime: nvidia
     depends_on:
+      iap_searxng:
+        condition: service_started
       iap_mysql:
         condition: service_started
       iap_redis:
