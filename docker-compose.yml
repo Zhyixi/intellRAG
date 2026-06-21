@@ -418,6 +418,7 @@ services:
       iap_langfuse_web:
         condition: service_started
     volumes:
+      - ./.cursor:/app/.cursor
       - ./iap_backend:/app
       - ./data:/app/data
       - ./db:/app/db
@@ -439,7 +440,7 @@ services:
   iap_frontend:
     build:
       context: ./iap_frontend/
-      dockerfile: python_env/Dockerfile
+      dockerfile: node_env/Dockerfile
       <<: *build-proxy
     image: iap_frontend:${ENV}
     pull_policy: never
@@ -458,6 +459,7 @@ services:
       NO_PROXY: ${no_proxy},iap_backend,iap_mongo,iap_mysql,iap_redis,iap_elasticsearch,localhost,127.0.0.1
     volumes:
       - ./iap_frontend:/app
+      - iap_frontend_node_modules:/app/node_modules
     ports:
       - "${FRONTEND_PORT}:8501"
     entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
@@ -477,6 +479,7 @@ volumes:
   langfuse_clickhouse_logs:
   langfuse_minio_data:
   langfuse_redis_data:
+  iap_frontend_node_modules:
 networks:
   # Compose bridge network; in k3s use a ClusterIP Service per workload instead.
   iap_network:

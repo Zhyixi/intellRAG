@@ -27,6 +27,7 @@ iap_backend.docker
 mcp_host2LLM/.venv/*
 mcp_server/.venv/*
 iap_backend/node_modules/*
+iap_frontend/node_modules/*
 storage/*
 iap_backend/weather/.venv/*
 iap_backend/.continue/

@@ -60,7 +60,7 @@ def browser_context_args():
 
 
 def wait_for_streamlit(page: Page, timeout_ms: int = 60_000) -> None:
-    page.wait_for_selector("[data-testid='stApp']", timeout=timeout_ms)
+    page.wait_for_selector("[data-testid='iap-react-app']", timeout=timeout_ms)
 
 
 def login_via_ui(page: Page, email: str, password: str) -> None:
