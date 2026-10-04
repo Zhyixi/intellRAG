@@ -169,3 +169,18 @@ and started with the saved 12 GB VRAM constraint. Final verification returned:
 - Strata process VRAM: 10,444 MiB
 - Chat response: `GHCR 啟動成功`
 - Warm generation speed: 22.9 token/s for the short six-token response
+
+## Cloud cleanup
+
+After the report and reusable image were published, the temporary GCP test
+environment was removed. The console was checked after deletion and showed:
+
+- No VM instances
+- No persistent disks
+- No snapshots
+- No snapshot schedules
+- No reserved internal or external IP addresses
+
+The deleted VM, GPU, CPU, RAM, and 200 GB SSD therefore no longer produce new
+resource charges. Previously accrued usage can remain visible in billing
+reports until Google's normal reporting delay has passed.
