@@ -149,3 +149,23 @@ ghcr.io/zhyixi/qwen38-strata:cuda13-sm86-sm89
 The image contains Strata and kernels for compute capabilities 8.6 and 8.9.
 It intentionally does not contain the roughly 75 GB of model and MTP data;
 those files are downloaded to the `strata-data` volume on first start.
+
+## Registry verification
+
+GitHub Actions run `37183742583` completed successfully. An anonymous Docker
+configuration could read the public manifest, and the GCP test host then
+performed a real pull of the image:
+
+```text
+index digest: sha256:7bbf0b3b4d049e0024020eedc26df4f4757836c589e22cf9543007701d76247d
+platform: linux/amd64
+```
+
+A new container created from the GHCR image mounted the existing
+`strata-data` volume, found the downloaded model without downloading it again,
+and started with the saved 12 GB VRAM constraint. Final verification returned:
+
+- Health: `status: ok`
+- Strata process VRAM: 10,444 MiB
+- Chat response: `GHCR 啟動成功`
+- Warm generation speed: 22.9 token/s for the short six-token response
